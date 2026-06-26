@@ -1,0 +1,815 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>判断推理 タイムアタック</title>
+
+  <!-- ▼ iOS PWA 必須タグ ▼ -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="判断推理">
+  <meta name="theme-color" content="#09111F">
+
+  <!-- ホーム画面アイコン（iOS） -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxODAgMTgwIj48cmVjdCB3aWR0aD0iMTgwIiBoZWlnaHQ9IjE4MCIgcng9IjM2IiBmaWxsPSIjMDkxMTFGIi8+PHJlY3QgeD0iMTYiIHk9IjE2IiB3aWR0aD0iMTQ4IiBoZWlnaHQ9IjE0OCIgcng9IjI0IiBmaWxsPSIjMTExRTMwIi8+PHRleHQgeD0iOTAiIHk9IjExNiIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iOTYiIGZvbnQtd2VpZ2h0PSI3MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiM2MzY2RjEiPuWIqDwvdGV4dD48L3N2Zz4=">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;700&display=swap" rel="stylesheet">
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --sat: env(safe-area-inset-top, 0px);
+      --sab: env(safe-area-inset-bottom, 0px);
+    }
+    html, body {
+      height: 100%;
+      background: #09111F;
+      overscroll-behavior: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-text-size-adjust: 100%;
+    }
+    #root { min-height: 100dvh; }
+    button {
+      -webkit-tap-highlight-color: transparent;
+      -webkit-appearance: none;
+    }
+    /* スクロールバー非表示 */
+    ::-webkit-scrollbar { display: none; }
+  </style>
+</head>
+<body>
+  <div id="root">
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100dvh;background:#09111F;color:#4E6D8C;font-family:sans-serif;font-size:14px">
+      読み込み中…
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect, useRef } = React;
+
+    // ─── カラーパレット ──────────────────────────────────────────
+    const C = {
+      bg:     "#09111F",
+      card:   "#111E30",
+      elev:   "#192840",
+      border: "#1E3050",
+      text:   "#EBF2FA",
+      muted:  "#4E6D8C",
+      mut2:   "#8AAAC4",
+      lv1:    "#4ADE80",
+      lv2:    "#FFBA08",
+      lv3:    "#F87171",
+      jun:    "#818CF8",
+      dai:    "#2DD4BF",
+    };
+
+    // セーフエリア対応パディング
+    const safeWrap = (vt = 16, vb = 16) => ({
+      paddingTop:    `calc(${vt}px + env(safe-area-inset-top, 0px))`,
+      paddingRight:  "16px",
+      paddingBottom: `calc(${vb}px + env(safe-area-inset-bottom, 0px))`,
+      paddingLeft:   "16px",
+    });
+
+    // ─── 問題データ（50問）──────────────────────────────────────
+    const PROBLEMS = [
+      // ══ Level 1 (易) 60秒 Q1-Q15 ══
+      { id:1,  lv:1, t:60, cat:"大小関係",
+        q:"A、B、Cの3人の身長を比べると、AはBより高く、BはCより高かった。最も身長が低いのは誰か？",
+        ch:["A","B","C","わからない"], ans:2,
+        ex:"A > B > C の順。\n最も低いのはC。" },
+
+      { id:2,  lv:1, t:60, cat:"大小関係",
+        q:"X、Y、Zの3つの荷物の重さを比べると、XはYより重く、YはZより重かった。最も重いのはどれか？",
+        ch:["X","Y","Z","わからない"], ans:0,
+        ex:"X > Y > Z の順。\n最も重いのはX。" },
+
+      { id:3,  lv:1, t:60, cat:"順序関係",
+        q:"A〜Dの4人が競走した。AはBより先にゴールし、BはCより先に、CはDより先にゴールした。最後（4位）にゴールしたのは誰か？",
+        ch:["A","B","C","D"], ans:3,
+        ex:"A > B > C > D の順にゴール。\n最後（4位）はD。" },
+
+      { id:4,  lv:1, t:60, cat:"大小関係",
+        q:"A〜Dの4人のテスト点数について、AはBより高く、BはCより高く、CはDより高かった。2番目に高い点数は誰か？",
+        ch:["A","B","C","D"], ans:1,
+        ex:"A > B > C > D の順。\n2番目はB。" },
+
+      { id:5,  lv:1, t:60, cat:"順序関係",
+        q:"A〜Dの4人が横1列に並んでいる。AはBの右にいる。CはAの右にいる。DはBの左にいる。最も左にいるのは誰か？",
+        ch:["A","B","C","D"], ans:3,
+        ex:"「DはBの左」→ D < B\n「AはBの右」→ B < A\n「CはAの右」→ A < C\n左からD, B, A, Cの順。最も左はD。" },
+
+      { id:6,  lv:1, t:60, cat:"大小関係",
+        q:"P、Q、Rの3人の体重について、PはQより重く、RはQより重く、PはRより重かった。最も軽いのは誰か？",
+        ch:["P","Q","R","わからない"], ans:1,
+        ex:"P > R（PはRより重）かつ R > Q（RはQより重）。\nP > R > Q の順。最も軽いのはQ。" },
+
+      { id:7,  lv:1, t:60, cat:"順序関係",
+        q:"A〜Eの5人が教室に順番に入った。BはAより早く入り、CはBより早く入り、DはCより早く入り、EはDより早く入った。最後に入ったのは誰か？",
+        ch:["A","B","C","D"], ans:0,
+        ex:"E > D > C > B > A の順に入室。\n最後はA。" },
+
+      { id:8,  lv:1, t:60, cat:"大小関係",
+        q:"A〜Dの4人の身長について、AはBより高く、CはAより高く、DはBより高かった。最も低いのは誰か？",
+        ch:["A","B","C","D"], ans:1,
+        ex:"C > A > B かつ D > B。\nBはA、C、D全員より低い → 最も低いのはB。" },
+
+      { id:9,  lv:1, t:60, cat:"順序関係",
+        q:"A〜Dの4人が横1列に並んでいる。CはAのすぐ左にいる。AはBのすぐ左にいる。DはBのすぐ右にいる。左から2番目にいるのは誰か？",
+        ch:["A","B","C","D"], ans:0,
+        ex:"C → A → B → D の順に隣接して並んでいる。\n2番目はA。" },
+
+      { id:10, lv:1, t:60, cat:"大小関係",
+        q:"A〜Eの5人のテスト点数について、AはBより高く、CはAより高く、DはBより低く、EはCより高かった。最も点数が低いのは誰か？",
+        ch:["A","B","C","D"], ans:3,
+        ex:"E > C > A > B > D の順。\n最も低いのはD。" },
+
+      { id:11, lv:1, t:60, cat:"順序関係",
+        q:"A〜Eの5人がレースをした。BはCより先にゴールした。AはBより先にゴールした。DはEより先にゴールした。CはDより先にゴールした。3位でゴールしたのは誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"A > B > C > D > E の順に確定。\n3位はC。" },
+
+      { id:12, lv:1, t:60, cat:"大小関係",
+        q:"A〜Fの6人の所持金について、AはBより少なく、BはCより少なく、CはDより少なく、DはEより少なく、EはFより少なかった。最も所持金が多いのは誰か？",
+        ch:["A","B","C","F"], ans:3,
+        ex:"F > E > D > C > B > A の順。\n最も多いのはF。" },
+
+      { id:13, lv:1, t:60, cat:"順序関係",
+        q:"A〜Dの4人がマラソンをした。Bが最初にゴールした。AはBより遅く、Cより早くゴールした。Dは最後にゴールした。Aは何位か？",
+        ch:["1位","2位","3位","4位"], ans:1,
+        ex:"B = 1位、D = 4位。AはBより遅くCより早い → B, A, C, D の順。\nAは2位。" },
+
+      { id:14, lv:1, t:60, cat:"大小関係",
+        q:"A〜Dの4人について、AはBより大きく、BはCより大きく、DはCより小さかった。確実にいえるのはどれか？",
+        ch:["AはCより小さい","BはDより小さい","CはAより大きい","DはBより小さい"], ans:3,
+        ex:"A > B > C かつ D < C。\nC < B なので D < C < B → DはBより確実に小さい。" },
+
+      { id:15, lv:1, t:60, cat:"大小関係",
+        q:"A〜Fの6人の身長について、AはBより高く、BはCより高く、CはDより高く、DはEより高く、EはFより高かった。3番目に高いのは誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"A > B > C > D > E > F の順。\n3番目はC。" },
+
+      // ══ Level 2 (普) 90秒 Q16-Q35 ══
+      { id:16, lv:2, t:90, cat:"大小関係",
+        q:"A〜Eの5人の身長について、AはBより高く、CはAより高く、DはBより低く、EはCより高かった。3番目に高いのは誰か？",
+        ch:["A","B","C","E"], ans:0,
+        ex:"E > C > A > B > D の順。\n3番目はA。" },
+
+      { id:17, lv:2, t:90, cat:"順序関係",
+        q:"A〜Eの5人が横1列に並んでいる。AはCの左にいる。BはAの左にいる。DはCの右にいる。EはBとAの間にいる。左から4番目にいるのは誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"「BはAの左」「EはBとAの間」→ B < E < A\n「AはCの左」→ A < C\n「DはCの右」→ C < D\n左からB, E, A, C, Dの順。4番目はC。" },
+
+      { id:18, lv:2, t:90, cat:"大小関係",
+        q:"A〜Eの5人の所持金について、AはBより多く、BはCより多く、CはDより多く、DはEより多かった。確実にいえるのはどれか？",
+        ch:["EはCより多い","DはBより多い","AはCより少ない","AはEより多い"], ans:3,
+        ex:"A > B > C > D > E の連鎖が確定。\nAはEより確実に多い。" },
+
+      { id:19, lv:2, t:90, cat:"順序関係",
+        q:"A〜Dの4人がパーティーに到着した。AはCより早く到着した。BはAより早く到着した。DはCより遅く到着した。3番目に到着したのは誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"B > A > C かつ D はCより遅い → B, A, C, D の順。\n3番目はC。" },
+
+      { id:20, lv:2, t:90, cat:"大小関係",
+        q:"A〜Eの5人のテスト点数について、AはEより低く、BはAより高く、CはAより低く、DはBより高く、EはBより低かった。最も低い点数は誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"D > B > E > A > C の順。\n最も低いのはC。" },
+
+      { id:21, lv:2, t:90, cat:"順序関係",
+        q:"A〜Eの5人が横1列に並んでいる。AはBのすぐ左にいる。BはCのすぐ左にいる。EはAのすぐ左にいる。DはEのすぐ左にいる。左から3番目にいるのは誰か？",
+        ch:["A","B","C","E"], ans:0,
+        ex:"D → E → A → B → C の順に隣接して並んでいる。\n3番目はA。" },
+
+      { id:22, lv:2, t:90, cat:"大小関係",
+        q:"A〜Eの5人の年齢について、AはBより年上、CはBより年上、DはCより年上、EはAより年下だった。確実にいえるのはどれか？",
+        ch:["AはCより年上","DはEより年上","AはDより年上","CはEより年下"], ans:1,
+        ex:"D > C > B かつ A > B > E。\nD > C > B > E の連鎖より、DはEより確実に年上。" },
+
+      { id:23, lv:2, t:90, cat:"順序関係",
+        q:"A〜Eの5人がリレーの走順を決めた。AはCの直前に走る。BはAの直前に走る。DはCの直後に走る。EはDの直後に走る。3番目に走るのは誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"B → A → C → D → E の順に確定。\n3番目はC。" },
+
+      { id:24, lv:2, t:90, cat:"大小関係",
+        q:"A〜Fの6人の得点について、AはBより高く、CはAより高く、DはCより高く、EはBより高くAより低く、FはDより高かった。3番目に高いのは誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"F > D > C > A > E > B の順。\n3番目はC。" },
+
+      { id:25, lv:2, t:90, cat:"順序関係",
+        q:"A〜Eの5人が横1列に並んでいる。AとCの間にちょうど2人いる。BはCのすぐ右にいる。DはAのすぐ左にいる。EはBの右にいる。左から3番目にいるのは誰か？",
+        ch:["A","B","C","D"], ans:3,
+        ex:"AとCの間に2人 → |pos(A)−pos(C)| = 3\nCがAより左の場合: C, B, D, A, Eの順に一意に確定。\n3番目はD。" },
+
+      { id:26, lv:2, t:90, cat:"大小関係",
+        q:"A〜Eの5人の体重について、AはCより重く、CはDより重く、DはBより重く、EはAより重かった。確実にいえるのはどれか？",
+        ch:["AはBより軽い","EはDより重い","DはEより重い","CはEより重い"], ans:1,
+        ex:"E > A > C > D > B の順。\nEはDより確実に重い。" },
+
+      { id:27, lv:2, t:90, cat:"順序関係",
+        q:"A〜Fの6人が横1列に並んでいる。AはCのすぐ右にいる。BはAのすぐ右にいる。DはBのすぐ右にいる。EはCのすぐ左にいる。FはDのすぐ右にいる。左から4番目にいるのは誰か？",
+        ch:["A","B","C","D"], ans:1,
+        ex:"E → C → A → B → D → F の順に隣接して並んでいる。\n4番目はB。" },
+
+      { id:28, lv:2, t:90, cat:"大小関係",
+        q:"A〜Fの6人の点数について、AはBより高く、CはAより高く、DはCより高く、EはBより高くAより低く、FはAより高くCより低かった。4番目に高いのは誰か？",
+        ch:["A","B","E","F"], ans:0,
+        ex:"D > C > F > A > E > B の順。\n4番目はA。" },
+
+      { id:29, lv:2, t:90, cat:"順序関係",
+        q:"A〜Eの5人がある競技に出場した。AはBとDの間の順位だった。CはAより前の順位だった。EはDより後の順位だった。BはCより前の順位だった。2番目に出場したのは誰か？",
+        ch:["A","B","C","D"], ans:2,
+        ex:"「BはCより前」「CはAより前」→ B < C < A\n「AはBとDの間」かつB < A → A < D。\nB, C, A, D, Eの順。2番目はC。" },
+
+      { id:30, lv:2, t:90, cat:"大小関係",
+        q:"A〜Eの5人の身長について、AはBより高く、BはCより高く、CはDより高く、EはAより低くBより高かった。2番目に高いのは誰か？",
+        ch:["A","B","C","E"], ans:3,
+        ex:"A > B > C > D かつ A > E > B。\nA > E > B > C > D の順。2番目はE。" },
+
+      { id:31, lv:2, t:90, cat:"順序関係",
+        q:"A〜Fの6人がイベント会場に到着した。CはAより早く到着した。AはBより早く到着した。DはCより早く到着した。EはBより遅く到着した。FはCとAの間に到着した。3番目に到着したのは誰か？",
+        ch:["A","C","E","F"], ans:3,
+        ex:"D > C > F > A > B > E の順。\n3番目はF。" },
+
+      { id:32, lv:2, t:90, cat:"大小関係",
+        q:"A〜Fの6人の年収について、AはBより多く、EはAより多く、FはBより多くAより少なく、DはCより多くBより少なく、CはBより少なかった。4番目に多いのは誰か？",
+        ch:["A","B","D","F"], ans:1,
+        ex:"E > A > F > B > D > C の順。\n4番目はB。" },
+
+      { id:33, lv:2, t:90, cat:"順序関係",
+        q:"A〜Eの5人が横1列に並んでいる。AとBの間にちょうど2人いる。CはAのすぐ右にいる。DはBのすぐ左にいる。EはCの右にいる。左から4番目にいるのは誰か？",
+        ch:["A","B","C","D"], ans:1,
+        ex:"AとBの間に2人 → |pos(A)−pos(B)| = 3\nA < B の場合: A, C, D, B, Eの順に一意に確定。\n4番目はB。" },
+
+      { id:34, lv:2, t:90, cat:"大小関係",
+        q:"A〜Eの5人の点数について、AはBより高く、BはDより高く、DはCより高く、EはAより低くBより高かった。3番目に高いのは誰か？",
+        ch:["A","B","C","E"], ans:1,
+        ex:"A > E > B > D > C の順（EはAより低くBより高い）。\n3番目はB。" },
+
+      { id:35, lv:2, t:90, cat:"順序関係",
+        q:"A〜Fの6人が横1列に並んでいる。AはBのすぐ左にいる。CはAのすぐ左にいる。DはBのすぐ右にいる。EはCのすぐ左にいる。FはDのすぐ右にいる。左から5番目にいるのは誰か？",
+        ch:["A","B","D","F"], ans:2,
+        ex:"E → C → A → B → D → F の順に隣接して並んでいる。\n5番目はD。" },
+
+      // ══ Level 3 (難) 120秒 Q36-Q50 ══
+      { id:36, lv:3, t:120, cat:"大小関係",
+        q:"A〜Eの5人の身長について、AはBより高く、CはBより高く、BはDより高く、EはDより高かった。確実にいえるのはどれか？",
+        ch:["AはDより高い","EはBより高い","CはEより高い","AはCより高い"], ans:0,
+        ex:"A > B > D（AはBより、BはDより高い）が確定。\nよって AはDより確実に高い。\n※ C、Eの大小はそれぞれ不確定。" },
+
+      { id:37, lv:3, t:120, cat:"大小関係",
+        q:"A〜Eの5人の体重について、AはBより重く、BはCより重く、DはEより重く、EはAより重かった。4番目に重いのは誰か？",
+        ch:["A","B","C","D"], ans:1,
+        ex:"D > E > A > B > C の連鎖が確定（各条件を繋げると一本の鎖になる）。\n4番目はB。" },
+
+      { id:38, lv:3, t:120, cat:"順序関係",
+        q:"A〜Fの6人が横1列に並んでいる。AとDの間にちょうど2人いる。BはAのすぐ右にいる。DはCのすぐ左にいる。FはCのすぐ右にいる。EはBの左にいる。左から4番目にいるのは誰か？",
+        ch:["C","D","E","F"], ans:3,
+        ex:"|pos(A)−pos(D)| = 3 かつ DはCの左、FはCの右 → D, C, Fが連続。\nBはAの右 → A, Bが連続。D < Aのとき: E, D, C, F, A, Bの順に一意に確定。\n4番目はF。" },
+
+      { id:39, lv:3, t:120, cat:"大小関係",
+        q:"A〜Fの6人の点数について、AはBより高く、CはAより高く、DはFより高く、EはCより高くDより低く、FはAより高く、CはFより高かった。4番目に高いのは誰か？",
+        ch:["A","B","C","F"], ans:3,
+        ex:"E > D > C > F > A > B の順に確定。\n4番目はF。" },
+
+      { id:40, lv:3, t:120, cat:"順序関係",
+        q:"A〜Fの6人がパーティーに到着した。BはAとCの間の時刻に到着した。DはCより後に到着した。EはBより前に到着した。FはEとBの間に到着した。AはEより前に到着した。4番目に到着したのは誰か？",
+        ch:["A","B","C","E"], ans:1,
+        ex:"AはEより前 → A > E（早い順）。EはBより前 → E > B。FはEとBの間 → E > F > B。\nBはAとCの間かつA > B → A > B > C。\nA, E, F, B, C, Dの順に確定。4番目はB。" },
+
+      { id:41, lv:3, t:120, cat:"大小関係",
+        q:"A〜Eの5人の年齢について、AはBより年上、BはCより年上、DはEより年下、EはAより年下だった。確実にいえるのはどれか？",
+        ch:["EはCより年上","DはBより年下","AはDより年上","CはEより年下"], ans:2,
+        ex:"A > B > C かつ A > E > D（EはAより年下、DはEより年下）。\nAはB, C, E, D全員より年上 → AはDより確実に年上。" },
+
+      { id:42, lv:3, t:120, cat:"順序関係",
+        q:"A〜Fの6人がリレーをした。BはAの直後に走る。CはBの直後に走る。DはCの直後に走る。EはAの直前に走る。FはDの直後に走る。5番目に走るのは誰か？",
+        ch:["B","C","D","F"], ans:2,
+        ex:"E → A → B → C → D → F の順に確定。\n5番目はD。" },
+
+      { id:43, lv:3, t:120, cat:"大小関係",
+        q:"A〜Eの5人の得点について、AはBより高く、BはCより高く、DはEより高く、EはAより高かった。3番目に高いのは誰か？",
+        ch:["A","B","C","D"], ans:0,
+        ex:"D > E > A > B > C の連鎖が確定。\n3番目はA。" },
+
+      { id:44, lv:3, t:120, cat:"順序関係",
+        q:"A〜Eの5人が横1列に並んでいる。AとEの間にちょうど2人いる。BはAのすぐ左にいる。CはEのすぐ右にいる。DはCより右にいる。左から2番目にいるのは誰か？",
+        ch:["A","B","C","E"], ans:2,
+        ex:"|pos(A)−pos(E)| = 3 かつ B = A−1、C = E+1。\nE < A の場合: E, C, B, A, D の順に一意に確定。\n2番目はC。" },
+
+      { id:45, lv:3, t:120, cat:"大小関係",
+        q:"A〜Eの5人の点数について、AはBより高く、CはDより高く、BはCより高く、EはDより高かった。確実にいえるのはどれか？",
+        ch:["AはDより高い","EはBより高い","CはEより高い","AはCより低い"], ans:0,
+        ex:"A > B > C > D の連鎖が確定（A>B>C>D）。\nAはDより確実に高い。\n※ EはDより高いが、E対A/B/Cの大小は不確定。" },
+
+      { id:46, lv:3, t:120, cat:"順序関係",
+        q:"A〜Fの6人が図書館に到着した。BはAより早く到着した。CはBより早く到着した。DはEより早く到着した。EはCより早く到着した。FはBとCの間に到着した。3番目に到着したのは誰か？",
+        ch:["B","C","D","F"], ans:1,
+        ex:"D > E > C > F > B > A の順に確定（FはCとBの間）。\n3番目はC。" },
+
+      { id:47, lv:3, t:120, cat:"大小関係",
+        q:"A〜Fの6人のテスト点数について、AはBより高く、BはCより高く、DはEより高く、EはAより高く、CはFより高かった。4番目に高いのは誰か？",
+        ch:["A","B","C","D"], ans:1,
+        ex:"D > E > A > B > C > F の順に確定。\n4番目はB。" },
+
+      { id:48, lv:3, t:120, cat:"順序関係",
+        q:"A〜Eの5人が横1列に並んでいる。AとCの間にちょうど1人いる。BはAのすぐ右にいる。DはCのすぐ左にいる。EはBの左にいる。左から3番目にいるのは誰か？",
+        ch:["A","B","C","E"], ans:3,
+        ex:"|pos(A)−pos(C)| = 2、B = A+1、D = C−1。\nC < A の場合: D, C, E, A, Bの順に一意に確定。\n3番目はE。" },
+
+      { id:49, lv:3, t:120, cat:"大小関係",
+        q:"A〜Eの5人の身長について、AはBより高く、CはAより高く、DはEより高く、EはBより低かった。確実にいえるのはどれか？",
+        ch:["DはAより高い","CはEより高い","DはCより高い","AはDより高い"], ans:1,
+        ex:"C > A > B > E かつ D > E。\nC > A > B > E の連鎖より CはEより確実に高い。\n※ DとA/B/Cの大小関係は不確定。" },
+
+      { id:50, lv:3, t:120, cat:"順序関係",
+        q:"A〜Fの6人が横1列に並んでいる。AはBとFの間にいる。CはAのすぐ左にいる。DはBのすぐ左にいる。EはCの左にいる。FはBより右にいる。左から5番目にいるのは誰か？",
+        ch:["A","B","C","D"], ans:0,
+        ex:"B < A < F（AはBとFの間）、C = A−1、D = B−1。\n整理すると D < B < C < A < F かつ E < C。\n有効な配置はすべて A が5番目に確定する。" },
+    ];
+
+    // ─── ユーティリティ ──────────────────────────────────────────
+    const lvLabel = { 1:"易", 2:"普", 3:"難" };
+    const lvColor = { 1:C.lv1, 2:C.lv2, 3:C.lv3 };
+    const catColor = (cat) => cat === "順序関係" ? C.jun : C.dai;
+
+    function CircleTimer({ pct, color }) {
+      const r = 28, cx = 34, cy = 34, circ = 2 * Math.PI * r;
+      return (
+        <svg width={68} height={68} style={{ display:"block", flexShrink:0 }}>
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={C.border} strokeWidth={5} />
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={color} strokeWidth={5}
+            strokeDasharray={circ}
+            strokeDashoffset={circ * (1 - pct)}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={{ transition:"stroke-dashoffset 0.9s linear, stroke 0.3s" }} />
+        </svg>
+      );
+    }
+
+    // ─── メインコンポーネント ────────────────────────────────────
+    function App() {
+      const [phase, setPhase]       = useState("start");
+      const [idx, setIdx]           = useState(0);
+      const [timeLeft, setTimeLeft] = useState(0);
+      const [answers, setAnswers]   = useState([]);
+      const [chosen, setChosen]     = useState(null);
+      const [reviewIdx, setReviewIdx] = useState(0);
+      const timerRef = useRef(null);
+
+      const q = PROBLEMS[idx];
+      const total = PROBLEMS.length;
+
+      useEffect(() => {
+        if (phase !== "quiz") { clearInterval(timerRef.current); return; }
+        timerRef.current = setInterval(() => {
+          setTimeLeft(t => {
+            if (t <= 1) { clearInterval(timerRef.current); setPhase("timeout"); return 0; }
+            return t - 1;
+          });
+        }, 1000);
+        return () => clearInterval(timerRef.current);
+      }, [phase, idx]);
+
+      function startQuiz() {
+        setIdx(0); setAnswers([]); setChosen(null);
+        setTimeLeft(PROBLEMS[0].t); setPhase("quiz");
+      }
+
+      function handleChoice(ci) {
+        if (chosen !== null) return;
+        clearInterval(timerRef.current);
+        setChosen(ci);
+        const rec = { qid: q.id, chosen: ci, correct: ci === q.ans };
+        const newAns = [...answers, rec];
+        setAnswers(newAns);
+        setTimeout(() => {
+          if (idx + 1 < total) {
+            const next = PROBLEMS[idx + 1];
+            setIdx(idx + 1); setChosen(null);
+            setTimeLeft(next.t); setPhase("quiz");
+          } else { setPhase("result"); }
+        }, 1400);
+      }
+
+      function handleTimeout() {
+        const rec = { qid: q.id, chosen: null, correct: false };
+        const newAns = [...answers, rec];
+        setAnswers(newAns);
+        setTimeout(() => {
+          if (idx + 1 < total) {
+            const next = PROBLEMS[idx + 1];
+            setIdx(idx + 1); setChosen(null);
+            setTimeLeft(next.t); setPhase("quiz");
+          } else { setPhase("result"); }
+        }, 1800);
+      }
+
+      useEffect(() => { if (phase === "timeout") handleTimeout(); }, [phase]);
+
+      const timerColor = () => {
+        const pct = timeLeft / q.t;
+        if (pct > 0.5) return C.lv1;
+        if (pct > 0.25) return C.lv2;
+        return C.lv3;
+      };
+
+      // ─── 開始画面 ──────────────────────────────────────────────
+      if (phase === "start") {
+        const byLv = [1, 2, 3].map(lv => PROBLEMS.filter(p => p.lv === lv));
+        return (
+          <div style={{ background:C.bg, minHeight:"100dvh", color:C.text,
+            fontFamily:"'Noto Sans JP',sans-serif", ...safeWrap(24, 24) }}>
+            <div style={{ maxWidth:640, margin:"0 auto" }}>
+              <div style={{ textAlign:"center", marginBottom:28 }}>
+                <div style={{ fontSize:11, letterSpacing:3, color:C.muted, textTransform:"uppercase", marginBottom:8 }}>
+                  判断推理 タイムアタック
+                </div>
+                <h1 style={{ margin:0, fontSize:26, fontWeight:700, color:C.text }}>
+                  順序関係・大小関係
+                </h1>
+                <p style={{ margin:"8px 0 0", fontSize:13, color:C.mut2 }}>
+                  全50問｜難易度順｜制限時間あり
+                </p>
+              </div>
+
+              <div style={{ display:"flex", gap:10, marginBottom:24 }}>
+                {[1,2,3].map(lv => (
+                  <div key={lv} style={{ flex:1, background:C.card, border:`1px solid ${C.border}`,
+                    borderRadius:12, padding:"14px 10px", textAlign:"center" }}>
+                    <div style={{ fontSize:18, fontWeight:700, color:lvColor[lv] }}>{lvLabel[lv]}</div>
+                    <div style={{ fontSize:12, color:C.mut2, marginTop:4 }}>{byLv[lv-1].length}問</div>
+                    <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>
+                      {lv===1?"60秒":lv===2?"90秒":"120秒"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display:"flex", gap:10, marginBottom:24 }}>
+                {["順序関係","大小関係"].map(cat => (
+                  <div key={cat} style={{ display:"flex", alignItems:"center", gap:6,
+                    background:C.card, border:`1px solid ${C.border}`,
+                    borderRadius:8, padding:"8px 14px", flex:1, justifyContent:"center" }}>
+                    <div style={{ width:10, height:10, borderRadius:"50%", background:catColor(cat) }}/>
+                    <span style={{ fontSize:13, color:C.mut2 }}>{cat}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background:C.card, border:`1px solid ${C.border}`,
+                borderRadius:14, overflow:"hidden", marginBottom:24 }}>
+                <div style={{ padding:"12px 16px", borderBottom:`1px solid ${C.border}`,
+                  fontSize:12, color:C.muted, letterSpacing:1 }}>問題一覧</div>
+                <div style={{ maxHeight:300, overflowY:"auto", padding:"8px 12px" }}>
+                  {[1,2,3].map(lv => (
+                    <div key={lv} style={{ marginBottom:8 }}>
+                      <div style={{ fontSize:11, color:lvColor[lv], fontWeight:700,
+                        letterSpacing:1, padding:"4px 4px 6px", borderBottom:`1px solid ${C.border}`,
+                        marginBottom:6 }}>
+                        ■ {lvLabel[lv]}レベル（{lv===1?"易":lv===2?"普":"難"}）
+                      </div>
+                      <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                        {byLv[lv-1].map(p => (
+                          <div key={p.id} style={{ display:"flex", alignItems:"center", gap:5,
+                            background:C.elev, borderRadius:6, padding:"4px 8px", fontSize:11 }}>
+                            <div style={{ width:6, height:6, borderRadius:"50%", background:catColor(p.cat) }}/>
+                            <span style={{ color:C.mut2 }}>Q{p.id}</span>
+                            <span style={{ color:C.muted, fontSize:10 }}>{p.cat==="順序関係"?"順":"大"}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button onClick={startQuiz} style={{
+                width:"100%", padding:"16px", borderRadius:12, border:"none",
+                background:"linear-gradient(135deg,#3B82F6,#6366F1)",
+                color:"#fff", fontSize:16, fontWeight:700, cursor:"pointer",
+                letterSpacing:1, fontFamily:"inherit" }}>
+                スタート →
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // ─── クイズ画面 ────────────────────────────────────────────
+      if (phase === "quiz" || phase === "timeout") {
+        const pct = q.t > 0 ? timeLeft / q.t : 0;
+        const color = timerColor();
+        const progPct = idx / total;
+
+        return (
+          <div style={{ background:C.bg, minHeight:"100dvh", color:C.text,
+            fontFamily:"'Noto Sans JP',sans-serif", ...safeWrap(16, 16) }}>
+            <div style={{ maxWidth:640, margin:"0 auto" }}>
+
+              <div style={{ marginBottom:16 }}>
+                <div style={{ display:"flex", justifyContent:"space-between",
+                  fontSize:11, color:C.muted, marginBottom:6 }}>
+                  <span style={{ color:catColor(q.cat) }}>● {q.cat}</span>
+                  <span>Q{idx+1} / {total}</span>
+                </div>
+                <div style={{ height:4, background:C.border, borderRadius:2, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${progPct*100}%`,
+                    background:"linear-gradient(90deg,#3B82F6,#6366F1)",
+                    borderRadius:2, transition:"width 0.3s" }} />
+                </div>
+              </div>
+
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                marginBottom:16 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <CircleTimer pct={pct} color={phase==="timeout"?C.lv3:color} />
+                  <div>
+                    <div style={{ fontSize:26, fontWeight:700,
+                      color:phase==="timeout"?C.lv3:color, lineHeight:1 }}>
+                      {phase==="timeout"?"時間切れ":timeLeft}
+                    </div>
+                    <div style={{ fontSize:10, color:C.muted, marginTop:2 }}>秒</div>
+                  </div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+                  <div style={{ background:lvColor[q.lv]+"22", border:`1px solid ${lvColor[q.lv]}55`,
+                    color:lvColor[q.lv], borderRadius:6, padding:"3px 10px", fontSize:12, fontWeight:700 }}>
+                    {lvLabel[q.lv]}
+                  </div>
+                  <div style={{ background:catColor(q.cat)+"22", border:`1px solid ${catColor(q.cat)}55`,
+                    color:catColor(q.cat), borderRadius:6, padding:"3px 10px", fontSize:11 }}>
+                    {q.cat}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background:C.card, border:`1px solid ${C.border}`,
+                borderRadius:14, padding:"20px", marginBottom:16, lineHeight:1.75,
+                fontSize:15, color:C.text, whiteSpace:"pre-wrap" }}>
+                {q.q}
+              </div>
+
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {q.ch.map((ch, ci) => {
+                  let bg = C.card, border = C.border, textColor = C.text;
+                  if (chosen !== null) {
+                    if (ci === q.ans) { bg="#0D2E1A"; border=C.lv1; textColor=C.lv1; }
+                    else if (ci === chosen && ci !== q.ans) { bg="#2E0D0D"; border=C.lv3; textColor=C.lv3; }
+                    else { textColor = C.muted; }
+                  }
+                  if (phase === "timeout") { textColor = C.muted; }
+                  return (
+                    <button key={ci} onClick={() => handleChoice(ci)}
+                      disabled={chosen !== null || phase === "timeout"}
+                      style={{ background:bg, border:`1px solid ${border}`,
+                        borderRadius:10, padding:"14px 16px", color:textColor,
+                        fontSize:14, textAlign:"left", cursor:chosen!==null?"default":"pointer",
+                        transition:"all 0.2s", fontFamily:"inherit",
+                        display:"flex", alignItems:"center", gap:12 }}>
+                      <span style={{ width:26, height:26, borderRadius:"50%",
+                        background:C.elev, display:"flex", alignItems:"center",
+                        justifyContent:"center", fontSize:12, flexShrink:0, color:C.mut2 }}>
+                        {["A","B","C","D"][ci]}
+                      </span>
+                      {ch}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {chosen !== null && (
+                <div style={{ marginTop:16, background:C.elev,
+                  border:`1px solid ${C.border}`, borderRadius:12, padding:"16px",
+                  fontSize:13, color:C.mut2, lineHeight:1.8, whiteSpace:"pre-wrap" }}>
+                  <span style={{ color:chosen===q.ans?C.lv1:C.lv3, fontWeight:700, marginRight:8 }}>
+                    {chosen===q.ans?"✓ 正解":"✗ 不正解"}
+                  </span>
+                  {q.ex}
+                </div>
+              )}
+
+              {phase === "timeout" && (
+                <div style={{ marginTop:16, background:"#2E1A0D",
+                  border:`1px solid #F87171`, borderRadius:12, padding:"14px 16px",
+                  fontSize:13, color:C.lv3 }}>
+                  ⏱ 時間切れ。正解は「{q.ch[q.ans]}」でした。
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      }
+
+      // ─── 結果画面 ──────────────────────────────────────────────
+      if (phase === "result") {
+        const correct = answers.filter(a => a.correct).length;
+        const pct = Math.round((correct / total) * 100);
+        const byLv = [1,2,3].map(lv => {
+          const qs = answers.filter(a => PROBLEMS.find(p=>p.id===a.qid)?.lv===lv);
+          const c = qs.filter(a=>a.correct).length;
+          return { lv, total: qs.length, correct: c };
+        });
+        const grade = pct>=90?"S":pct>=75?"A":pct>=60?"B":"C";
+        const gradeColor = { S:C.lv1, A:"#60A5FA", B:C.lv2, C:C.lv3 };
+
+        return (
+          <div style={{ background:C.bg, minHeight:"100dvh", color:C.text,
+            fontFamily:"'Noto Sans JP',sans-serif", ...safeWrap(24, 24) }}>
+            <div style={{ maxWidth:640, margin:"0 auto" }}>
+              <div style={{ textAlign:"center", marginBottom:28 }}>
+                <div style={{ fontSize:11, color:C.muted, letterSpacing:2, marginBottom:8 }}>RESULT</div>
+                <div style={{ fontSize:52, fontWeight:700,
+                  color:pct>=80?C.lv1:pct>=60?C.lv2:C.lv3, lineHeight:1 }}>
+                  {grade}
+                </div>
+                <div style={{ fontSize:15, color:C.mut2, marginTop:8 }}>
+                  {correct} / {total} 問正解（{pct}%）
+                </div>
+              </div>
+
+              <div style={{ background:C.card, border:`1px solid ${C.border}`,
+                borderRadius:14, padding:"16px", marginBottom:16 }}>
+                <div style={{ fontSize:12, color:C.muted, marginBottom:12, letterSpacing:1 }}>難易度別</div>
+                {byLv.map(({ lv, total:t, correct:c }) => (
+                  <div key={lv} style={{ marginBottom:10 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4, fontSize:13 }}>
+                      <span style={{ color:lvColor[lv] }}>{lvLabel[lv]}（{lv===1?"易":lv===2?"普":"難"}）</span>
+                      <span style={{ color:C.mut2 }}>{c} / {t}</span>
+                    </div>
+                    <div style={{ height:6, background:C.border, borderRadius:3, overflow:"hidden" }}>
+                      <div style={{ height:"100%", width:`${t>0?(c/t)*100:0}%`,
+                        background:lvColor[lv], borderRadius:3 }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background:C.card, border:`1px solid ${C.border}`,
+                borderRadius:14, padding:"16px", marginBottom:20 }}>
+                <div style={{ fontSize:12, color:C.muted, marginBottom:10, letterSpacing:1 }}>正誤マップ</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:4 }}>
+                  {answers.map((a, i) => {
+                    const p = PROBLEMS.find(pp=>pp.id===a.qid);
+                    return (
+                      <div key={i}
+                        style={{ width:28, height:28, borderRadius:6,
+                          background:a.correct?C.lv1+"33":a.chosen===null?C.lv2+"33":C.lv3+"33",
+                          border:`1px solid ${a.correct?C.lv1:a.chosen===null?C.lv2:C.lv3}`,
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          fontSize:9, color:a.correct?C.lv1:a.chosen===null?C.lv2:C.lv3,
+                          cursor:"pointer" }}
+                        onClick={() => { setReviewIdx(i); setPhase("review"); }}>
+                        {a.qid}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ display:"flex", gap:16, marginTop:10, fontSize:11, color:C.muted }}>
+                  <span><span style={{ color:C.lv1 }}>■</span> 正解</span>
+                  <span><span style={{ color:C.lv3 }}>■</span> 不正解</span>
+                  <span><span style={{ color:C.lv2 }}>■</span> 時間切れ</span>
+                </div>
+              </div>
+
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={() => { setReviewIdx(0); setPhase("review"); }}
+                  style={{ flex:1, padding:"14px", borderRadius:10, border:`1px solid ${C.border}`,
+                    background:C.card, color:C.mut2, fontSize:14, cursor:"pointer",
+                    fontFamily:"inherit" }}>
+                  復習する
+                </button>
+                <button onClick={startQuiz}
+                  style={{ flex:1, padding:"14px", borderRadius:10, border:"none",
+                    background:"linear-gradient(135deg,#3B82F6,#6366F1)",
+                    color:"#fff", fontSize:14, fontWeight:700, cursor:"pointer",
+                    fontFamily:"inherit" }}>
+                  もう一度
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ─── 復習画面 ──────────────────────────────────────────────
+      if (phase === "review") {
+        const a = answers[reviewIdx];
+        const p = PROBLEMS.find(pp => pp.id === a.qid);
+        const isOk = a.correct;
+        const isTimeout = a.chosen === null;
+
+        return (
+          <div style={{ background:C.bg, minHeight:"100dvh", color:C.text,
+            fontFamily:"'Noto Sans JP',sans-serif", ...safeWrap(16, 16) }}>
+            <div style={{ maxWidth:640, margin:"0 auto" }}>
+
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+                marginBottom:16 }}>
+                <button onClick={() => setPhase("result")}
+                  style={{ background:"none", border:"none", color:C.muted,
+                    fontSize:13, cursor:"pointer", padding:"4px 0", fontFamily:"inherit" }}>
+                  ← 結果へ
+                </button>
+                <span style={{ fontSize:13, color:C.muted }}>
+                  {reviewIdx+1} / {answers.length}
+                </span>
+              </div>
+
+              <div style={{ display:"flex", gap:8, marginBottom:14, flexWrap:"wrap" }}>
+                <div style={{ background:isOk?C.lv1+"22":isTimeout?C.lv2+"22":C.lv3+"22",
+                  border:`1px solid ${isOk?C.lv1:isTimeout?C.lv2:C.lv3}`,
+                  color:isOk?C.lv1:isTimeout?C.lv2:C.lv3,
+                  borderRadius:6, padding:"4px 12px", fontSize:12, fontWeight:700 }}>
+                  {isOk?"✓ 正解":isTimeout?"⏱ 時間切れ":"✗ 不正解"}
+                </div>
+                <div style={{ background:lvColor[p.lv]+"22", border:`1px solid ${lvColor[p.lv]}55`,
+                  color:lvColor[p.lv], borderRadius:6, padding:"4px 10px", fontSize:12 }}>
+                  {lvLabel[p.lv]}
+                </div>
+                <div style={{ background:catColor(p.cat)+"22", border:`1px solid ${catColor(p.cat)}55`,
+                  color:catColor(p.cat), borderRadius:6, padding:"4px 10px", fontSize:12 }}>
+                  {p.cat}
+                </div>
+                <div style={{ background:C.elev, color:C.muted, borderRadius:6,
+                  padding:"4px 10px", fontSize:12 }}>
+                  Q{p.id} / 制限{p.t}秒
+                </div>
+              </div>
+
+              <div style={{ background:C.card, border:`1px solid ${C.border}`,
+                borderRadius:14, padding:"18px", marginBottom:14,
+                fontSize:14, lineHeight:1.75, color:C.text }}>
+                {p.q}
+              </div>
+
+              <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+                {p.ch.map((ch, ci) => {
+                  const isAns = ci === p.ans;
+                  const isChosen = ci === a.chosen;
+                  let bg=C.card, border=C.border, textColor=C.muted;
+                  if (isAns) { bg="#0D2E1A"; border=C.lv1; textColor=C.lv1; }
+                  if (isChosen && !isAns) { bg="#2E0D0D"; border=C.lv3; textColor=C.lv3; }
+                  return (
+                    <div key={ci} style={{ background:bg, border:`1px solid ${border}`,
+                      borderRadius:10, padding:"12px 14px", color:textColor,
+                      fontSize:13, display:"flex", alignItems:"center", gap:10 }}>
+                      <span style={{ width:24, height:24, borderRadius:"50%",
+                        background:C.elev, display:"flex", alignItems:"center",
+                        justifyContent:"center", fontSize:11, flexShrink:0 }}>
+                        {["A","B","C","D"][ci]}
+                      </span>
+                      <span>{ch}</span>
+                      {isAns && <span style={{ marginLeft:"auto", fontSize:11 }}>← 正解</span>}
+                      {isChosen && !isAns && <span style={{ marginLeft:"auto", fontSize:11 }}>← あなたの回答</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ background:C.elev, border:`1px solid ${C.border}`,
+                borderRadius:12, padding:"16px", marginBottom:20,
+                fontSize:13, color:C.mut2, lineHeight:1.85, whiteSpace:"pre-wrap" }}>
+                <div style={{ fontSize:11, color:C.muted, marginBottom:8, letterSpacing:1 }}>【解説】</div>
+                {p.ex}
+              </div>
+
+              <div style={{ display:"flex", gap:10 }}>
+                <button onClick={() => setReviewIdx(Math.max(0, reviewIdx-1))}
+                  disabled={reviewIdx===0}
+                  style={{ flex:1, padding:"13px", borderRadius:10,
+                    border:`1px solid ${C.border}`, background:C.card,
+                    color:reviewIdx===0?C.muted:C.text, fontSize:14,
+                    cursor:reviewIdx===0?"default":"pointer", fontFamily:"inherit" }}>
+                  ← 前へ
+                </button>
+                <button onClick={() => setReviewIdx(Math.min(answers.length-1, reviewIdx+1))}
+                  disabled={reviewIdx===answers.length-1}
+                  style={{ flex:1, padding:"13px", borderRadius:10,
+                    border:`1px solid ${C.border}`, background:C.card,
+                    color:reviewIdx===answers.length-1?C.muted:C.text,
+                    fontSize:14, cursor:reviewIdx===answers.length-1?"default":"pointer",
+                    fontFamily:"inherit" }}>
+                  次へ →
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      return null;
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
